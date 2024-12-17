@@ -1,0 +1,24 @@
+{
+    "name": "@afridho/mongodb",
+    "version": "1.0.0",
+    "description": "A simple MongoDB client wrapper for easy database operations",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "mongodb",
+        "database",
+        "client",
+        "wrapper"
+    ],
+    "author": "afridhozega",
+    "license": "MIT",
+    "dependencies": {
+        "dotenv": "^16.0.3",
+        "mongodb": "^5.0.0"
+    },
+    "engines": {
+        "node": ">=16.0.0"
+    }
+}
