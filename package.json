@@ -1,10 +1,11 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "A simple MongoDB client wrapper for easy database operations",
     "main": "index.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "publish": "npm publish"
     },
     "keywords": [
         "mongodb",
