@@ -1,9 +1,12 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "description": "A simple MongoDB client wrapper for easy database operations",
-    "main": "index.js",
+    "main": "dist/index.js",
+    "types": "dist/connectdb.d.ts",
     "scripts": {
+        "build": "tsc",
+        "prepare": "npm run build",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [
@@ -18,8 +21,13 @@
         "dotenv": "^16.0.3",
         "mongodb": "^5.0.0"
     },
-    "repository": "afridho/mongodb",
+    "devDependencies": {
+        "@types/mongodb": "^4.0.7",
+        "@types/node": "^16.0.0",
+        "typescript": "^4.5.0"
+    },
     "engines": {
         "node": ">=16.0.0"
-    }
+    },
+    "repository": "afridho/mongodb"
 }
