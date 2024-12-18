@@ -1,6 +1,6 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.0.8",
+    "version": "1.1.0",
     "description": "A simple MongoDB client wrapper for easy database operations",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -22,6 +22,23 @@
     "devDependencies": {
         "@types/node": "^16.0.0",
         "@types/mongodb": "^4.0.7",
-        "typescript": "^4.5.0"
-    }
+        "typescript": "^5.1.6"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/afridho/mongodb.git"
+    },
+    "homepage": "https://github.com/afridho/mongodb#readme",
+    "author": "afridho",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/afridho/mongodb/issues"
+    },
+    "keywords": [
+        "mongodb",
+        "database",
+        "nosql",
+        "database-wrapper",
+        "afridho"
+    ]
 }
