@@ -1,13 +1,14 @@
-import { ClientDB, ObjectId } from "./connectdb";
+import ClientDB from "./connectdb";
 
 // ES Module exports
 export default ClientDB;
-export { ClientDB, ObjectId };
+export { ClientDB };
 
 // CommonJS export for compatibility
 // @ts-ignore
 if (typeof module !== "undefined" && typeof module.exports !== "undefined") {
-    module.exports = ClientDB;
-    module.exports.ClientDB = ClientDB;
-    module.exports.ObjectId = ObjectId;
+    module.exports = {
+        default: ClientDB,
+        ClientDB,
+    };
 }

@@ -65,13 +65,30 @@ class ClientDB {
     }
 
     /**
+     * Helper to convert _id string to ObjectId if needed
+     * @param {Document} query - The query object to preprocess
+     * @returns {Document} The processed query with _id converted if applicable
+     */
+    private preprocessQuery(query: Document): Document {
+        if (query._id && typeof query._id === "string") {
+            try {
+                query._id = new ObjectId(query._id);
+            } catch {
+                // Invalid ObjectId string, leave as is or handle error if you prefer
+            }
+        }
+        return query;
+    }
+
+    /**
      * Reads a document from the collection based on the provided query.
      * @param {Document} query - The query to find the document.
      * @returns {Promise<Document|null>} The found document or null if not found.
      */
     async read(query: Document): Promise<Document | null> {
         await this.connect();
-        return await this.collection!.findOne(query);
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.findOne(processedQuery);
     }
 
     /**
@@ -111,7 +128,8 @@ class ClientDB {
      */
     async update(query: Document, data: Document): Promise<Document> {
         await this.connect();
-        return await this.collection!.updateOne(query, { $set: data });
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.updateOne(processedQuery, { $set: data });
     }
 
     /**
@@ -121,7 +139,8 @@ class ClientDB {
      */
     async delete(query: Document): Promise<Document> {
         await this.connect();
-        return await this.collection!.deleteOne(query);
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.deleteOne(processedQuery);
     }
 
     /**
@@ -131,7 +150,8 @@ class ClientDB {
      */
     async deleteMany(query: Document): Promise<Document> {
         await this.connect();
-        return await this.collection!.deleteMany(query);
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.deleteMany(processedQuery);
     }
 
     /**
@@ -141,7 +161,8 @@ class ClientDB {
      */
     async find(query: Document): Promise<Document[]> {
         await this.connect();
-        return await this.collection!.find(query).toArray();
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.find(processedQuery).toArray();
     }
 
     /**
@@ -173,4 +194,4 @@ class ClientDB {
     }
 }
 
-export { ClientDB, ObjectId };
+export default ClientDB;
