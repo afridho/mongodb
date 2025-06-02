@@ -28,6 +28,13 @@ const mongoOptions: MongoClientOptions = {
     connectTimeoutMS: 50000,
 };
 
+interface ReadAllOptions {
+    /**
+     * Optional sort object, e.g. { createdAt: 1 } for ascending or { createdAt: -1 } for descending
+     */
+    sort?: Document;
+}
+
 /**
  * Class representing a MongoDB client for a specific collection.
  */
@@ -93,16 +100,20 @@ class ClientDB {
 
     /**
      * Reads all documents from the collection with optional sorting.
-     * @param {Document} [sort] - Optional sort object, e.g. { createdAt: 1 } for ascending.
+     * @param {ReadAllOptions} [options] - Optional options object.
+     * @param {Document} [options.sort] - Optional sort object, e.g. { createdAt: 1 } for ascending.
      * @returns {Promise<Document[]>} An array of all documents, optionally sorted.
      */
-    async readAll(sort?: Document): Promise<Document[]> {
+    async readAll(options?: ReadAllOptions): Promise<Document[]> {
         await this.connect();
-        if (sort) {
-            return await this.collection!.find().sort(sort).toArray();
-        } else {
-            return await this.collection!.find().toArray();
+
+        let cursor = this.collection!.find();
+
+        if (options?.sort) {
+            cursor = cursor.sort(options.sort);
         }
+
+        return await cursor.toArray();
     }
 
     /**
