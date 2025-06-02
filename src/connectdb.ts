@@ -92,12 +92,17 @@ class ClientDB {
     }
 
     /**
-     * Reads all documents from the collection.
-     * @returns {Promise<Document[]>} An array of all documents in the collection.
+     * Reads all documents from the collection with optional sorting.
+     * @param {Document} [sort] - Optional sort object, e.g. { createdAt: 1 } for ascending.
+     * @returns {Promise<Document[]>} An array of all documents, optionally sorted.
      */
-    async readAll(): Promise<Document[]> {
+    async readAll(sort?: Document): Promise<Document[]> {
         await this.connect();
-        return await this.collection!.find().toArray();
+        if (sort) {
+            return await this.collection!.find().sort(sort).toArray();
+        } else {
+            return await this.collection!.find().toArray();
+        }
     }
 
     /**
