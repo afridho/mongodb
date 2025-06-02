@@ -1,4 +1,10 @@
-import { MongoClient, Collection, Document, MongoClientOptions } from "mongodb";
+import {
+    MongoClient,
+    Collection,
+    Document,
+    MongoClientOptions,
+    ObjectId,
+} from "mongodb";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -167,4 +173,4 @@ class ClientDB {
     }
 }
 
-export default ClientDB;
+export { ClientDB, ObjectId };
