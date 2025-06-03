@@ -182,6 +182,17 @@ class ClientDB {
     }
 
     /**
+     * Gets random documents from the collection.
+     * @param {number} [total=1] - The number of random documents to retrieve.
+     * @returns {Promise<Document[]>} An array of random documents.
+     */
+    async getRandomData(total: number = 1): Promise<Document[]> {
+        await this.connect();
+        const pipeline = [{ $sample: { size: total } }];
+        return await this.collection!.aggregate(pipeline).toArray();
+    }
+
+    /**
      * Gets the storage statistics for the collection.
      * @returns {Promise<{storageSize: number, size: number, count: number}>} The storage statistics including storageSize.
      */
