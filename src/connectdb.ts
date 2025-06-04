@@ -33,7 +33,7 @@ interface ReadAllOptions {
      * Optional sort object, e.g. { createdAt: 1 } for ascending or { createdAt: -1 } for descending
      */
     sort?: Document;
-    limit?: Document;
+    limit?: number;
 }
 
 /**
@@ -114,7 +114,7 @@ class ClientDB {
             cursor = cursor.sort(options.sort);
         }
         if (options?.limit) {
-            cursor = cursor.limit(Number(options.limit));
+            cursor = cursor.limit(options.limit);
         }
 
         return await cursor.toArray();
