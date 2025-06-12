@@ -78,7 +78,7 @@ class ClientDB {
      * @returns {Document} The processed query with _id converted if applicable
      */
     private preprocessQuery(query: Document): Document {
-        if (!query._id) return query;
+        if (!("_id" in query)) return query;
         if (typeof query._id === "string") {
             try {
                 query._id = new ObjectId(query._id);
