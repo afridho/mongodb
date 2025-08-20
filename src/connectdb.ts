@@ -328,11 +328,6 @@ class ClientDB {
             });
         }
 
-        // projection
-        if (Object.keys(project).length > 0) {
-            pipeline.push({ $project: project });
-        }
-
         // options
         if (options?.sort) {
             pipeline.push({ $sort: options.sort });
@@ -342,6 +337,10 @@ class ClientDB {
         }
         if (options?.limit) {
             pipeline.push({ $limit: options.limit });
+        }
+
+        if (Object.keys(project).length > 0) {
+            pipeline.push({ $project: project });
         }
 
         return await this.collection!.aggregate(pipeline).toArray();
