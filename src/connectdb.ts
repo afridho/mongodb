@@ -223,6 +223,104 @@ class ClientDB {
     async close(): Promise<void> {
         await this.client.close();
     }
+
+    /**
+     * Finds documents in the current collection and dynamically joins related collections
+     * using MongoDB's `$lookup` aggregation stage.
+     *
+     * This is useful when you want to "populate" data from other collections
+     * (similar to Mongoose's populate) but in a flexible, dynamic way.
+     *
+     * ### Example:
+     * ```ts
+     * const tasks = await tasksDb.findWithRelations(
+     *   { column: "todo" }, // filter
+     *   [
+     *     {
+     *       from: "kanban_tags",
+     *       localField: "tags",
+     *       foreignField: "value",
+     *       as: "tags"
+     *     },
+     *     {
+     *       from: "kanban_persons",
+     *       localField: "persons",
+     *       foreignField: "_id",
+     *       as: "persons",
+     *       isObjectId: true // convert string IDs to ObjectId
+     *     }
+     *   ],
+     *   {
+     *     title: 1,
+     *     description: 1,
+     *     "tags.label": 1,
+     *     "persons.name": 1
+     *   }
+     * );
+     * ```
+     *
+     * @param {Document} [filter={}] - MongoDB query filter. Defaults to `{}` (fetch all).
+     * @param {Object[]} [relations=[]] - Array of relation configurations for `$lookup`.
+     * @param {string} relations[].from - Target collection name to join with.
+     * @param {string} relations[].localField - Field in this collection that holds the reference.
+     * @param {string} relations[].foreignField - Field in the target collection to match against.
+     * @param {string} relations[].as - The alias name for the joined data in the output.
+     * @param {boolean} [relations[].isObjectId] - If `true`, will map string IDs in `localField` into ObjectId before lookup.
+     * @param {Document} [project={}] - Optional MongoDB projection object to limit fields in the final output.
+     *
+     * @returns {Promise<Document[]>} A promise that resolves to an array of documents with joined relations applied.
+     */
+    async findWithRelations(
+        filter: Document = {},
+        relations: {
+            from: string; // collection tujuan
+            localField: string; // field di collection ini
+            foreignField: string; // field di collection tujuan
+            as: string; // alias hasil join
+            isObjectId?: boolean; // kalau localField berupa string ObjectId
+        }[] = [],
+        project: Document = {}
+    ): Promise<Document[]> {
+        await this.connect();
+        const processedQuery = this.preprocessQuery(filter);
+
+        const pipeline: Document[] = [];
+
+        if (Object.keys(processedQuery).length > 0) {
+            pipeline.push({ $match: processedQuery });
+        }
+
+        for (const rel of relations) {
+            if (rel.isObjectId) {
+                pipeline.push({
+                    $addFields: {
+                        [rel.localField]: {
+                            $map: {
+                                input: `$${rel.localField}`,
+                                as: "id",
+                                in: { $toObjectId: "$$id" },
+                            },
+                        },
+                    },
+                });
+            }
+
+            pipeline.push({
+                $lookup: {
+                    from: rel.from,
+                    localField: rel.localField,
+                    foreignField: rel.foreignField,
+                    as: rel.as,
+                },
+            });
+        }
+
+        if (Object.keys(project).length > 0) {
+            pipeline.push({ $project: project });
+        }
+
+        return await this.collection!.aggregate(pipeline).toArray();
+    }
 }
 
 export default ClientDB;
