@@ -345,6 +345,89 @@ class ClientDB {
 
         return await this.collection!.aggregate(pipeline).toArray();
     }
+    /**
+     * Finds a single document in the current collection and dynamically joins related collections
+     * using MongoDB's `$lookup` aggregation stage.
+     *
+     * Mirip dengan `findWithRelations`, tapi hanya return satu dokumen (bukan array).
+     *
+     * ### Example:
+     * ```ts
+     * const task = await tasksDb.findOneWithRelations(
+     *   { _id: "66cfa89f3c9c7d776b5f4f10" },
+     *   [
+     *     {
+     *       from: "kanban_tags",
+     *       localField: "tags",
+     *       foreignField: "value",
+     *       as: "tags"
+     *     },
+     *     {
+     *       from: "kanban_persons",
+     *       localField: "persons",
+     *       foreignField: "_id",
+     *       as: "persons",
+     *       isObjectId: true
+     *     }
+     *   ]
+     * );
+     * ```
+     *
+     * @param {Document} filter - MongoDB query filter. Biasanya pakai `_id`.
+     * @param {Object[]} [relations=[]] - Array of relation configs sama seperti `findWithRelations`.
+     * @param {Document} [project={}] - Projection untuk limit field output.
+     *
+     * @returns {Promise<Document | null>} A single document with joined relations, or `null`.
+     */
+    async findOneWithRelations(
+        filter: Document,
+        relations: {
+            from: string;
+            localField: string;
+            foreignField: string;
+            as: string;
+            isObjectId?: boolean;
+        }[] = [],
+        project: Document = {}
+    ): Promise<Document | null> {
+        await this.connect();
+        const processedQuery = this.preprocessQuery(filter);
+
+        const pipeline: Document[] = [{ $match: processedQuery }];
+
+        // relations
+        for (const rel of relations) {
+            if (rel.isObjectId) {
+                pipeline.push({
+                    $addFields: {
+                        [rel.localField]: {
+                            $map: {
+                                input: `$${rel.localField}`,
+                                as: "id",
+                                in: { $toObjectId: "$$id" },
+                            },
+                        },
+                    },
+                });
+            }
+
+            pipeline.push({
+                $lookup: {
+                    from: rel.from,
+                    localField: rel.localField,
+                    foreignField: rel.foreignField,
+                    as: rel.as,
+                },
+            });
+        }
+
+        if (Object.keys(project).length > 0) {
+            pipeline.push({ $project: project });
+        }
+
+        const results = await this.collection!.aggregate(pipeline).toArray();
+        return results[0] || null;
+    }
 }
 
 export default ClientDB;
