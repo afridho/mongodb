@@ -34,6 +34,7 @@ interface ReadAllOptions {
      */
     sort?: Document;
     limit?: number;
+    skip?: number;
 }
 
 /**
@@ -115,6 +116,9 @@ class ClientDB {
         }
         if (options?.limit) {
             cursor = cursor.limit(options.limit);
+        }
+        if (options?.skip) {
+            cursor = cursor.skip(options.skip);
         }
 
         return await cursor.toArray();
@@ -255,6 +259,11 @@ class ClientDB {
      *     description: 1,
      *     "tags.label": 1,
      *     "persons.name": 1
+     *   },
+     *   {
+     *     sort: { createdAt: -1 },
+     *     limit: 10,
+     *     skip: 20
      *   }
      * );
      * ```
@@ -267,29 +276,33 @@ class ClientDB {
      * @param {string} relations[].as - The alias name for the joined data in the output.
      * @param {boolean} [relations[].isObjectId] - If `true`, will map string IDs in `localField` into ObjectId before lookup.
      * @param {Document} [project={}] - Optional MongoDB projection object to limit fields in the final output.
+     * @param {ReadAllOptions} [options={}] - Optional settings like sort, skip, and limit.
      *
      * @returns {Promise<Document[]>} A promise that resolves to an array of documents with joined relations applied.
      */
     async findWithRelations(
         filter: Document = {},
         relations: {
-            from: string; // collection tujuan
-            localField: string; // field di collection ini
-            foreignField: string; // field di collection tujuan
-            as: string; // alias hasil join
-            isObjectId?: boolean; // kalau localField berupa string ObjectId
+            from: string;
+            localField: string;
+            foreignField: string;
+            as: string;
+            isObjectId?: boolean;
         }[] = [],
-        project: Document = {}
+        project: Document = {},
+        options?: ReadAllOptions
     ): Promise<Document[]> {
         await this.connect();
         const processedQuery = this.preprocessQuery(filter);
 
         const pipeline: Document[] = [];
 
+        // filter
         if (Object.keys(processedQuery).length > 0) {
             pipeline.push({ $match: processedQuery });
         }
 
+        // relations
         for (const rel of relations) {
             if (rel.isObjectId) {
                 pipeline.push({
@@ -315,8 +328,20 @@ class ClientDB {
             });
         }
 
+        // projection
         if (Object.keys(project).length > 0) {
             pipeline.push({ $project: project });
+        }
+
+        // options
+        if (options?.sort) {
+            pipeline.push({ $sort: options.sort });
+        }
+        if (options?.skip) {
+            pipeline.push({ $skip: options.skip });
+        }
+        if (options?.limit) {
+            pipeline.push({ $limit: options.limit });
         }
 
         return await this.collection!.aggregate(pipeline).toArray();
