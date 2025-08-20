@@ -1,6 +1,6 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.6.2",
+    "version": "1.6.3",
     "description": "A simple MongoDB client wrapper for easy database operations",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",

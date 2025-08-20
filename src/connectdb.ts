@@ -428,6 +428,27 @@ class ClientDB {
         const results = await this.collection!.aggregate(pipeline).toArray();
         return results[0] || null;
     }
+
+    /**
+     * Counts the number of documents matching the query.
+     * Alias for countDocuments.
+     * @param {Document} [query={}] - Optional filter query.
+     * @returns {Promise<number>} The count of matching documents.
+     */
+    async count(query: Document = {}): Promise<number> {
+        return this.countDocuments(query);
+    }
+
+    /**
+     * Counts the number of documents matching the query.
+     * @param {Document} [query={}] - Optional filter query.
+     * @returns {Promise<number>} The count of matching documents.
+     */
+    async countDocuments(query: Document = {}): Promise<number> {
+        await this.connect();
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.countDocuments(processedQuery);
+    }
 }
 
 export default ClientDB;
