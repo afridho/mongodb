@@ -157,17 +157,25 @@ class ClientDB {
     }
 
     /**
-     * Updates multiple documents in the collection based on the provided query.
-     * @param {Document} query - The query to find the documents to update.
-     * @param {Document} data - The data to update.
+     * Updates multiple documents in the collection.
+     * - If you pass Mongo operators ($set, $inc, etc), it will use them directly.
+     * - If you pass a plain object, it will wrap it inside $set.
+     *
+     * @param {Document} query - The filter to match documents.
+     * @param {Document} data - The update data (plain object or with operators).
      * @returns {Promise<Document>} The result of the update operation.
      */
     async updateMany(query: Document, data: Document): Promise<Document> {
         await this.connect();
         const processedQuery = this.preprocessQuery(query);
-        return await this.collection!.updateMany(processedQuery, {
-            $set: data,
-        });
+
+        // Cek apakah "data" punya operator Mongo ($set, $inc, dll)
+        const hasOperator = Object.keys(data).some((key) =>
+            key.startsWith("$")
+        );
+        const updateDoc = hasOperator ? data : { $set: data };
+
+        return await this.collection!.updateMany(processedQuery, updateDoc);
     }
 
     /**
