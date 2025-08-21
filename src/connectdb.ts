@@ -157,6 +157,20 @@ class ClientDB {
     }
 
     /**
+     * Updates multiple documents in the collection based on the provided query.
+     * @param {Document} query - The query to find the documents to update.
+     * @param {Document} data - The data to update.
+     * @returns {Promise<Document>} The result of the update operation.
+     */
+    async updateMany(query: Document, data: Document): Promise<Document> {
+        await this.connect();
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.updateMany(processedQuery, {
+            $set: data,
+        });
+    }
+
+    /**
      * Deletes a document from the collection based on the provided query.
      * @param {Document} query - The query to find the document to delete.
      * @returns {Promise<Document>} The result of the delete operation.
