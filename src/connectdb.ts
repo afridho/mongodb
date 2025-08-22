@@ -205,11 +205,18 @@ class ClientDB {
      * @param {Document} query - The query to find the documents.
      * @returns {Promise<Document[]>} An array of found documents.
      */
-    async find(query: Document, options?: ReadAllOptions): Promise<Document[]> {
+    async find(
+        query: Document,
+        options?: ReadAllOptions,
+        project?: Document
+    ): Promise<Document[]> {
         await this.connect();
         const processedQuery = this.preprocessQuery(query);
 
-        let cursor = this.collection!.find(processedQuery);
+        let cursor = this.collection!.find(
+            processedQuery,
+            project ? { projection: project } : undefined
+        );
 
         if (options?.sort) {
             cursor = cursor.sort(options.sort);
