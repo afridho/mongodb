@@ -330,6 +330,7 @@ class ClientDB {
             foreignField: string;
             as: string;
             isObjectId?: boolean;
+            isSingle?: boolean; // 👈 NEW
         }[] = [],
         project: Document = {},
         options?: ReadAllOptions
@@ -339,25 +340,35 @@ class ClientDB {
 
         const pipeline: Document[] = [];
 
-        // filter
         if (Object.keys(processedQuery).length > 0) {
             pipeline.push({ $match: processedQuery });
         }
 
-        // relations
         for (const rel of relations) {
             if (rel.isObjectId) {
-                pipeline.push({
-                    $addFields: {
-                        [rel.localField]: {
-                            $map: {
-                                input: `$${rel.localField}`,
-                                as: "id",
-                                in: { $toObjectId: "$$id" },
+                if (rel.isSingle) {
+                    // 👇 Single string → ObjectId
+                    pipeline.push({
+                        $addFields: {
+                            [rel.localField]: {
+                                $toObjectId: `$${rel.localField}`,
                             },
                         },
-                    },
-                });
+                    });
+                } else {
+                    // 👇 Array of strings → map to ObjectIds
+                    pipeline.push({
+                        $addFields: {
+                            [rel.localField]: {
+                                $map: {
+                                    input: `$${rel.localField}`,
+                                    as: "id",
+                                    in: { $toObjectId: "$$id" },
+                                },
+                            },
+                        },
+                    });
+                }
             }
 
             pipeline.push({
@@ -370,16 +381,9 @@ class ClientDB {
             });
         }
 
-        // options
-        if (options?.sort) {
-            pipeline.push({ $sort: options.sort });
-        }
-        if (options?.skip) {
-            pipeline.push({ $skip: options.skip });
-        }
-        if (options?.limit) {
-            pipeline.push({ $limit: options.limit });
-        }
+        if (options?.sort) pipeline.push({ $sort: options.sort });
+        if (options?.skip) pipeline.push({ $skip: options.skip });
+        if (options?.limit) pipeline.push({ $limit: options.limit });
 
         if (Object.keys(project).length > 0) {
             pipeline.push({ $project: project });
@@ -387,6 +391,7 @@ class ClientDB {
 
         return await this.collection!.aggregate(pipeline).toArray();
     }
+
     /**
      * Finds a single document in the current collection and dynamically joins related collections
      * using MongoDB's `$lookup` aggregation stage.
@@ -429,6 +434,7 @@ class ClientDB {
             foreignField: string;
             as: string;
             isObjectId?: boolean;
+            isSingle?: boolean;
         }[] = [],
         project: Document = {}
     ): Promise<Document | null> {
@@ -440,17 +446,27 @@ class ClientDB {
         // relations
         for (const rel of relations) {
             if (rel.isObjectId) {
-                pipeline.push({
-                    $addFields: {
-                        [rel.localField]: {
-                            $map: {
-                                input: `$${rel.localField}`,
-                                as: "id",
-                                in: { $toObjectId: "$$id" },
+                if (rel.isSingle) {
+                    pipeline.push({
+                        $addFields: {
+                            [rel.localField]: {
+                                $toObjectId: `$${rel.localField}`,
                             },
                         },
-                    },
-                });
+                    });
+                } else {
+                    pipeline.push({
+                        $addFields: {
+                            [rel.localField]: {
+                                $map: {
+                                    input: `$${rel.localField}`,
+                                    as: "id",
+                                    in: { $toObjectId: "$$id" },
+                                },
+                            },
+                        },
+                    });
+                }
             }
 
             pipeline.push({
