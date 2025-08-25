@@ -507,6 +507,45 @@ class ClientDB {
         const processedQuery = this.preprocessQuery(query);
         return await this.collection!.countDocuments(processedQuery);
     }
+
+    /**
+     * One-time migration: convert string date fields to Date objects.
+     *
+     * @param fields - Which fields to convert (default: createdAt, updatedAt, startAt, endAt)
+     * @returns number of documents updated
+     */
+    async migrateDateFields(
+        fields: string[] = ["createdAt", "updatedAt", "startAt", "endAt"]
+    ): Promise<number> {
+        await this.connect();
+
+        const cursor = this.collection!.find({
+            $or: fields.map((f) => ({ [f]: { $type: "string" } })),
+        });
+
+        let count = 0;
+        while (await cursor.hasNext()) {
+            const doc = await cursor.next();
+            if (!doc) continue; // TS happy + runtime safe
+
+            const updates: Record<string, any> = {};
+            for (const field of fields) {
+                if (typeof doc[field] === "string") {
+                    updates[field] = new Date(doc[field]);
+                }
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await this.collection!.updateOne(
+                    { _id: doc._id },
+                    { $set: updates }
+                );
+                count++;
+            }
+        }
+
+        return count;
+    }
 }
 
 export default ClientDB;
