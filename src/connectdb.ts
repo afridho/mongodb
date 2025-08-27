@@ -549,3 +549,4 @@ class ClientDB {
 }
 
 export default ClientDB;
+export { ObjectId };
