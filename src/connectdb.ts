@@ -243,6 +243,32 @@ class ClientDB {
     }
 
     /**
+     * Run an aggregation pipeline on the current collection.
+     *
+     * @param {Array<Document>} pipeline - An array of MongoDB aggregation stages.
+     *   Example:
+     *   [
+     *     { $unwind: "$tags" },
+     *     { $group: { _id: "$tags", count: { $sum: 1 } } },
+     *     { $sort: { count: -1 } },
+     *     { $limit: 10 }
+     *   ]
+     *
+     * @returns {Promise<Document[]>} Resolves with the array of aggregation results.
+     *
+     * @throws {Error} If the aggregation query fails.
+     */
+    async aggregate(pipeline: Document[] = []): Promise<Document[]> {
+        try {
+            await this.connect(); // ensure connected
+            return await this.collection!.aggregate(pipeline).toArray();
+        } catch (err) {
+            console.error("Aggregate error:", err);
+            throw err;
+        }
+    }
+
+    /**
      * Gets the storage statistics for the collection.
      * @returns {Promise<{storageSize: number, size: number, count: number}>} The storage statistics including storageSize.
      */
