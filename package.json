@@ -1,13 +1,14 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.7.2",
+    "version": "1.7.3",
     "description": "A simple MongoDB client wrapper for easy database operations",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "scripts": {
         "prepare": "npm run build",
         "clean": "rm -rf dist",
-        "build": "npm run clean && tsc"
+        "build": "npm run clean && tsc",
+        "publish": "npm version patch --no-git-tag-version && git add . && git commit -m \"feature: update version\" && git push origin master && npm publish"
     },
     "exports": {
         ".": {

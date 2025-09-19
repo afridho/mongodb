@@ -165,11 +165,17 @@ class ClientDB {
      * @param {Document} data - The update data (plain object or with operators).
      * @returns {Promise<Document>} The result of the update operation.
      */
-    async updateMany(query: Document, data: Document): Promise<Document> {
+    async updateMany(
+        query: Document,
+        data: Document | Document[]
+    ): Promise<Document> {
         await this.connect();
         const processedQuery = this.preprocessQuery(query);
 
-        // Cek apakah "data" punya operator Mongo ($set, $inc, dll)
+        if (Array.isArray(data)) {
+            return await this.collection!.updateMany(processedQuery, data);
+        }
+
         const hasOperator = Object.keys(data).some((key) =>
             key.startsWith("$")
         );
