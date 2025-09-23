@@ -238,6 +238,17 @@ class ClientDB {
     }
 
     /**
+     * Reads multiple documents from the collection based on a query.
+     * @param {Document} query - The filter query.
+     * @returns {Promise<Document[]>} Array of matching documents.
+     */
+    async readMany(query: Document): Promise<Document[]> {
+        await this.connect();
+        const processedQuery = this.preprocessQuery(query);
+        return await this.collection!.find(processedQuery).toArray();
+    }
+
+    /**
      * Gets random documents from the collection.
      * @param {number} [total=1] - The number of random documents to retrieve.
      * @returns {Promise<Document[]>} An array of random documents.
