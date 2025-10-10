@@ -106,74 +106,22 @@ class ClientDB {
      * @param {Document} [options.sort] - Optional sort object, e.g. { createdAt: 1 } for ascending.
      * @returns {Promise<Document[]>} An array of all documents, optionally sorted.
      */
-    /**
-     * Reads all documents from the collection with optional sorting and pagination.
-     *
-     * @param {ReadAllOptions & { paginated?: boolean; response?: boolean; req?: any }} [options]
-     * - sort?: sort object, e.g. { createdAt: -1 }
-     * - limit?: number of documents per page
-     * - skip?: number of documents to skip (ignored if paginated)
-     * - paginated?: boolean → enable pagination using req.query.page & req.query.per_page
-     * - response?: boolean → wrap in { success, page, per_page, total, total_pages, data }
-     * - req?: Express Request → used for reading page & per_page from query
-     *
-     * @returns {Promise<Document[] | { success: boolean; page: number; per_page: number; total: number; total_pages: number; data: Document[] }>}
-     */
-    async readAll(
-        options?: ReadAllOptions & {
-            paginated?: boolean;
-            req?: any;
-        }
-    ): Promise<
-        | Document[]
-        | {
-              success: boolean;
-              page: number;
-              per_page: number;
-              total: number;
-              total_pages: number;
-              data: Document[];
-          }
-    > {
+    async readAll(options?: ReadAllOptions): Promise<Document[]> {
         await this.connect();
 
-        const query = this.collection!.find();
+        let cursor = this.collection!.find();
 
-        if (!options?.paginated) {
-            // Normal (non-paginated) path — same behavior as before
-            let cursor = query;
-            if (options?.sort) cursor = cursor.sort(options.sort);
-            if (options?.limit) cursor = cursor.limit(options.limit);
-            if (options?.skip) cursor = cursor.skip(options.skip);
-            return await cursor.toArray();
+        if (options?.sort) {
+            cursor = cursor.sort(options.sort);
+        }
+        if (options?.limit) {
+            cursor = cursor.limit(options.limit);
+        }
+        if (options?.skip) {
+            cursor = cursor.skip(options.skip);
         }
 
-        // ✅ Pagination enabled
-        const page = Math.max(parseInt(options?.req?.query?.page, 10) || 1, 1);
-        const per_page = Math.max(
-            parseInt(options?.req?.query?.per_page, 10) || 10,
-            1
-        );
-        const skip = (page - 1) * per_page;
-
-        const total = await this.collection!.countDocuments();
-        const total_pages = Math.ceil(total / per_page);
-
-        let cursor = query
-            .sort(options?.sort || {})
-            .skip(skip)
-            .limit(per_page);
-
-        const data = await cursor.toArray();
-
-        return {
-            success: true,
-            page,
-            per_page,
-            total,
-            total_pages,
-            data,
-        };
+        return await cursor.toArray();
     }
 
     /**
@@ -425,35 +373,14 @@ class ClientDB {
             foreignField: string;
             as: string;
             isObjectId?: boolean;
-            isSingle?: boolean;
+            isSingle?: boolean; // 👈 NEW
         }[] = [],
         project: Document = {},
-        options: ReadAllOptions & {
-            paginated?: boolean;
-            req?: any;
-        } = {}
-    ): Promise<
-        | Document[]
-        | {
-              success: boolean;
-              page: number;
-              per_page: number;
-              total: number;
-              total_pages: number;
-              data: Document[];
-          }
-    > {
+        options?: ReadAllOptions
+    ): Promise<Document[]> {
         await this.connect();
         const processedQuery = this.preprocessQuery(filter);
 
-        const page = Math.max(parseInt(options.req?.query?.page, 10) || 1, 1);
-        const per_page = Math.max(
-            parseInt(options.req?.query?.per_page, 10) || 10,
-            1
-        );
-        const skip = (page - 1) * per_page;
-
-        // Base aggregation pipeline
         const pipeline: Document[] = [];
 
         if (Object.keys(processedQuery).length > 0) {
@@ -463,6 +390,7 @@ class ClientDB {
         for (const rel of relations) {
             if (rel.isObjectId) {
                 if (rel.isSingle) {
+                    // 👇 Single string → ObjectId
                     pipeline.push({
                         $addFields: {
                             [rel.localField]: {
@@ -471,6 +399,7 @@ class ClientDB {
                         },
                     });
                 } else {
+                    // 👇 Array of strings → map to ObjectIds
                     pipeline.push({
                         $addFields: {
                             [rel.localField]: {
@@ -495,33 +424,13 @@ class ClientDB {
             });
         }
 
-        if (options.sort) pipeline.push({ $sort: options.sort });
+        if (options?.sort) pipeline.push({ $sort: options.sort });
+        if (options?.skip) pipeline.push({ $skip: options.skip });
+        if (options?.limit) pipeline.push({ $limit: options.limit });
 
-        if (options.paginated) {
-            const total = await this.count(processedQuery);
-            const total_pages = Math.ceil(total / per_page);
-            pipeline.push({ $skip: skip });
-            pipeline.push({ $limit: per_page });
-            if (Object.keys(project).length > 0)
-                pipeline.push({ $project: project });
-
-            const data = await this.collection!.aggregate(pipeline).toArray();
-
-            return {
-                success: true,
-                page,
-                per_page,
-                total,
-                total_pages,
-                data,
-            };
-        }
-
-        // Normal (non-paginated) case
-        if (options.skip) pipeline.push({ $skip: options.skip });
-        if (options.limit) pipeline.push({ $limit: options.limit });
-        if (Object.keys(project).length > 0)
+        if (Object.keys(project).length > 0) {
             pipeline.push({ $project: project });
+        }
 
         return await this.collection!.aggregate(pipeline).toArray();
     }
