@@ -373,14 +373,37 @@ class ClientDB {
             foreignField: string;
             as: string;
             isObjectId?: boolean;
-            isSingle?: boolean; // 👈 NEW
+            isSingle?: boolean;
         }[] = [],
         project: Document = {},
-        options?: ReadAllOptions
-    ): Promise<Document[]> {
+        options: ReadAllOptions & {
+            paginated?: boolean;
+            response?: boolean;
+            req?: any;
+        } = {}
+    ): Promise<
+        | Document[]
+        | {
+              success: boolean;
+              message: string;
+              page: number;
+              per_page: number;
+              total: number;
+              total_pages: number;
+              data: Document[];
+          }
+    > {
         await this.connect();
         const processedQuery = this.preprocessQuery(filter);
 
+        const page = Math.max(parseInt(options.req?.query?.page, 10) || 1, 1);
+        const per_page = Math.max(
+            parseInt(options.req?.query?.per_page, 10) || 10,
+            1
+        );
+        const skip = (page - 1) * per_page;
+
+        // Base aggregation pipeline
         const pipeline: Document[] = [];
 
         if (Object.keys(processedQuery).length > 0) {
@@ -390,7 +413,6 @@ class ClientDB {
         for (const rel of relations) {
             if (rel.isObjectId) {
                 if (rel.isSingle) {
-                    // 👇 Single string → ObjectId
                     pipeline.push({
                         $addFields: {
                             [rel.localField]: {
@@ -399,7 +421,6 @@ class ClientDB {
                         },
                     });
                 } else {
-                    // 👇 Array of strings → map to ObjectIds
                     pipeline.push({
                         $addFields: {
                             [rel.localField]: {
@@ -424,13 +445,38 @@ class ClientDB {
             });
         }
 
-        if (options?.sort) pipeline.push({ $sort: options.sort });
-        if (options?.skip) pipeline.push({ $skip: options.skip });
-        if (options?.limit) pipeline.push({ $limit: options.limit });
+        if (options.sort) pipeline.push({ $sort: options.sort });
 
-        if (Object.keys(project).length > 0) {
-            pipeline.push({ $project: project });
+        // ✅ Pagination behavior
+        if (options.paginated) {
+            const total = await this.count(processedQuery);
+            const total_pages = Math.ceil(total / per_page);
+            pipeline.push({ $skip: skip });
+            pipeline.push({ $limit: per_page });
+            if (Object.keys(project).length > 0)
+                pipeline.push({ $project: project });
+
+            const data = await this.collection!.aggregate(pipeline).toArray();
+
+            if (options.response) {
+                return {
+                    success: true,
+                    message: "Success",
+                    page,
+                    per_page,
+                    total,
+                    total_pages,
+                    data,
+                };
+            }
+            return data;
         }
+
+        // Normal (non-paginated) case
+        if (options.skip) pipeline.push({ $skip: options.skip });
+        if (options.limit) pipeline.push({ $limit: options.limit });
+        if (Object.keys(project).length > 0)
+            pipeline.push({ $project: project });
 
         return await this.collection!.aggregate(pipeline).toArray();
     }
