@@ -167,21 +167,24 @@ class ClientDB {
      */
     async updateMany(
         query: Document,
-        data: Document | Document[]
+        data: Document | Document[],
+        options: { upsert?: boolean } = {}
     ): Promise<Document> {
         await this.connect();
         const processedQuery = this.preprocessQuery(query);
 
-        if (Array.isArray(data)) {
-            return await this.collection!.updateMany(processedQuery, data);
-        }
+        const hasOperator =
+            !Array.isArray(data) &&
+            Object.keys(data).some((key) => key.startsWith("$"));
+        const updateDoc = Array.isArray(data)
+            ? data
+            : hasOperator
+            ? data
+            : { $set: data };
 
-        const hasOperator = Object.keys(data).some((key) =>
-            key.startsWith("$")
-        );
-        const updateDoc = hasOperator ? data : { $set: data };
-
-        return await this.collection!.updateMany(processedQuery, updateDoc);
+        return await this.collection!.updateMany(processedQuery, updateDoc, {
+            upsert: options.upsert ?? false,
+        });
     }
 
     /**
