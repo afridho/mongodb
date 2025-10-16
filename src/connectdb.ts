@@ -27,7 +27,6 @@ if (!DB_NAME) {
 const mongoOptions: MongoClientOptions = {
     connectTimeoutMS: 30000,
     maxPoolSize: 20, // prevent excessive parallel connections
-    minPoolSize: 0,
 };
 
 // --- Global connection cache (important for serverless) ---
