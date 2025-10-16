@@ -25,9 +25,33 @@ if (!DB_NAME) {
 
 // Define MongoDB client options
 const mongoOptions: MongoClientOptions = {
-    connectTimeoutMS: 50000,
+    connectTimeoutMS: 30000,
+    maxPoolSize: 10, // prevent excessive parallel connections
 };
 
+// --- Global connection cache (important for serverless) ---
+declare global {
+    // eslint-disable-next-line no-var
+    var _mongoClient: MongoClient | undefined;
+}
+
+let cachedClient: MongoClient | null = null;
+
+async function getMongoClient(): Promise<MongoClient> {
+    // if already connected or connecting
+    if (cachedClient) return cachedClient;
+
+    if (!global._mongoClient) {
+        console.log("🌱 Connecting to MongoDB...");
+        global._mongoClient = new MongoClient(DB_URI, mongoOptions);
+        await global._mongoClient.connect();
+    }
+
+    cachedClient = global._mongoClient;
+    return cachedClient!;
+}
+
+// --- Main class ---
 interface ReadAllOptions {
     /**
      * Optional sort object, e.g. { createdAt: 1 } for ascending or { createdAt: -1 } for descending
