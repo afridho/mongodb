@@ -35,20 +35,14 @@ declare global {
     var _mongoClient: MongoClient | undefined;
 }
 
-let cachedClient: MongoClient | null = null;
-
 async function getMongoClient(): Promise<MongoClient> {
-    // if already connected or connecting
-    if (cachedClient) return cachedClient;
+    if (global._mongoClient) return global._mongoClient;
 
-    if (!global._mongoClient) {
-        console.log("🌱 Connecting to MongoDB...");
-        global._mongoClient = new MongoClient(DB_URI, mongoOptions);
-        await global._mongoClient.connect();
-    }
-
-    cachedClient = global._mongoClient;
-    return cachedClient!;
+    console.log("🌱 Connecting to MongoDB...");
+    const client = new MongoClient(DB_URI, mongoOptions);
+    await client.connect();
+    global._mongoClient = client;
+    return client;
 }
 
 // --- Main class ---
@@ -65,17 +59,15 @@ interface ReadAllOptions {
  * Class representing a MongoDB client for a specific collection.
  */
 class ClientDB {
-    private client: MongoClient;
+    private client!: MongoClient;
     private collectionName: string;
     private collection: Collection | null;
-
     /**
      * Creates an instance of ClientDB.
      * @param {string} collectionName - The name of the collection to interact with.
      */
     constructor(collectionName: string) {
         // Use the validated DB_URI and predefined options
-        this.client = new MongoClient(DB_URI, mongoOptions);
         this.collectionName = collectionName;
         this.collection = null;
     }
@@ -85,15 +77,10 @@ class ClientDB {
      * @returns {Promise<void>}
      */
     async connect(): Promise<void> {
-        try {
-            if (!this.collection) {
-                await this.client.connect();
-                const database = this.client.db(DB_NAME);
-                this.collection = database.collection(this.collectionName);
-            }
-        } catch (error) {
-            console.error("Connection error:", error);
-            throw error;
+        if (!this.collection) {
+            this.client = await getMongoClient();
+            const db = this.client.db(DB_NAME);
+            this.collection = db.collection(this.collectionName);
         }
     }
 
