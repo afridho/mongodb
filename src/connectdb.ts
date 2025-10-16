@@ -28,8 +28,6 @@ const mongoOptions: MongoClientOptions = {
     connectTimeoutMS: 30000,
     maxPoolSize: 20, // prevent excessive parallel connections
     maxIdleTimeMS: 60000,
-    keepAlive: true,
-    keepAliveInitialDelay: 10000,
 };
 
 // --- Global connection cache (important for serverless) ---
