@@ -604,6 +604,208 @@ class ClientDB {
 
         return count;
     }
+    /**
+     * INTERNAL: Connect to external cluster
+     */
+    private static async _connectExternal(uri: string) {
+        const { MongoClient } = require("mongodb");
+        const client = new MongoClient(uri, {
+            maxPoolSize: 20,
+            connectTimeoutMS: 30000,
+        });
+        await client.connect();
+        return client;
+    }
+
+    /**
+     * INCREMENTAL BACKUP (NO DELETE):
+     * - Hanya ambil dokumen yang updatedAt > lastBackupAt
+     * - Tidak pernah hapus dokumen di backup
+     * - Upsert-only
+     */
+    static async incrementalBackupOneDatabase(params: {
+        targetUri: string;
+        sourceDb: string;
+        targetDb: string;
+    }) {
+        const { targetUri, sourceDb, targetDb } = params;
+
+        const sourceClient = await ClientDB._connectExternal(
+            process.env.MONGODB_URI!
+        );
+        const targetClient = await ClientDB._connectExternal(targetUri);
+
+        const src = sourceClient.db(sourceDb);
+        const tgt = targetClient.db(targetDb);
+
+        const metaCol = tgt.collection("_backup_meta");
+        const meta = await metaCol.findOne({ _id: "incremental" });
+
+        const lastBackupAt = meta?.lastBackupAt
+            ? new Date(meta.lastBackupAt)
+            : new Date(0);
+
+        const now = new Date();
+        const collections = await src.listCollections().toArray();
+        const report: any[] = [];
+
+        for (const c of collections) {
+            const name = c.name;
+            if (name === "_backup_meta") continue;
+
+            const srcCol = src.collection(name);
+            const tgtCol = tgt.collection(name);
+
+            // ambil dokumen yang berubah
+            const changedDocs = await srcCol
+                .find({ updatedAt: { $gt: lastBackupAt } })
+                .toArray();
+
+            for (const doc of changedDocs) {
+                await tgtCol.updateOne(
+                    { _id: doc._id },
+                    { $set: doc },
+                    { upsert: true }
+                );
+            }
+
+            report.push({
+                collection: name,
+                upserted: changedDocs.length,
+            });
+        }
+
+        // update checkpoint
+        await metaCol.updateOne(
+            { _id: "incremental" },
+            { $set: { lastBackupAt: now } },
+            { upsert: true }
+        );
+
+        await sourceClient.close();
+        await targetClient.close();
+
+        return {
+            mode: "incremental",
+            sourceDb,
+            targetDb,
+            lastBackupAt,
+            executedAt: now,
+            report,
+        };
+    }
+
+    /**
+     * MULTI-DATABASE INCREMENTAL (NO DELETE)
+     */
+    static async incrementalBackupManyDatabases(
+        targetUri: string,
+        dbList: string[]
+    ) {
+        const allResults: any[] = [];
+
+        for (const dbName of dbList) {
+            const r = await ClientDB.incrementalBackupOneDatabase({
+                targetUri,
+                sourceDb: dbName,
+                targetDb: dbName,
+            });
+            allResults.push(r);
+        }
+
+        return {
+            mode: "incremental",
+            targetUri,
+            results: allResults,
+        };
+    }
+
+    /**
+     * DELTA BACKUP (NO DELETE):
+     * - hanya dokumen baru (yang belum ada _id nya di backup)
+     * - tidak pernah hapus
+     */
+    static async deltaBackupOneDatabase(params: {
+        targetUri: string;
+        sourceDb: string;
+        targetDb: string;
+    }) {
+        const { targetUri, sourceDb, targetDb } = params;
+
+        const sourceClient = await ClientDB._connectExternal(
+            process.env.MONGODB_URI!
+        );
+        const targetClient = await ClientDB._connectExternal(targetUri);
+
+        const src = sourceClient.db(sourceDb);
+        const tgt = targetClient.db(targetDb);
+
+        const collections = await src.listCollections().toArray();
+        const report: any[] = [];
+
+        for (const c of collections) {
+            const name = c.name;
+            const srcCol = src.collection(name);
+            const tgtCol = tgt.collection(name);
+
+            // semua _id di backup
+            const tgtIds: Set<string> = new Set(
+                (
+                    await tgtCol.find({}, { projection: { _id: 1 } }).toArray()
+                ).map((d: Document) => String(d._id))
+            );
+
+            // dokumen yang belum ada
+            const newDocs = await srcCol
+                .find({
+                    _id: {
+                        $nin: Array.from(tgtIds).map((id) => new ObjectId(id)),
+                    },
+                })
+                .toArray();
+
+            if (newDocs.length) {
+                await tgtCol.insertMany(newDocs);
+            }
+
+            report.push({
+                collection: name,
+                inserted: newDocs.length,
+            });
+        }
+
+        await sourceClient.close();
+        await targetClient.close();
+
+        return {
+            mode: "delta",
+            sourceDb,
+            targetDb,
+            report,
+        };
+    }
+
+    /**
+     * MULTI-DATABASE DELTA (NO DELETE)
+     */
+    static async deltaBackupManyDatabases(targetUri: string, dbList: string[]) {
+        const allResults: any[] = [];
+
+        for (const dbName of dbList) {
+            const r = await ClientDB.deltaBackupOneDatabase({
+                targetUri,
+                sourceDb: dbName,
+                targetDb: dbName,
+            });
+            allResults.push(r);
+        }
+
+        return {
+            mode: "delta",
+            targetUri,
+            results: allResults,
+        };
+    }
 }
 
 export default ClientDB;
