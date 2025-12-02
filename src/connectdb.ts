@@ -814,7 +814,6 @@ class ClientDB {
         keepWeeks?: number;
     }) {
         const { sourceUri, targetUri, dbName } = params;
-        const keepWeeks = params.keepWeeks ?? 26;
 
         const now = new Date();
         const week = getISOWeek(now);
@@ -828,6 +827,9 @@ class ClientDB {
         const src = srcClient.db(dbName);
         const tgt = tgtClient.db(snapshotDbName);
 
+        // ⭐ Drop existing snapshot to prevent duplicate key errors
+        await tgt.dropDatabase();
+
         const collections = await src.listCollections().toArray();
         const report: any[] = [];
         let totalDocs = 0;
@@ -838,7 +840,7 @@ class ClientDB {
             const tgtCol = tgt.collection(name);
 
             const docs = await srcCol.find({}).toArray();
-            if (docs.length) {
+            if (docs.length > 0) {
                 await tgtCol.insertMany(docs);
                 totalDocs += docs.length;
             }
@@ -877,7 +879,6 @@ class ClientDB {
                 sourceUri,
                 targetUri: targetURI,
                 dbName,
-                keepWeeks,
             });
             results.push(r);
         }
