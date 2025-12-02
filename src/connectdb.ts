@@ -811,14 +811,12 @@ class ClientDB {
         sourceUri: string;
         targetUri: string;
         dbName: string;
-        keepWeeks?: number;
     }) {
         const { sourceUri, targetUri, dbName } = params;
 
         const now = new Date();
         const week = getISOWeek(now);
         const year = getISOWeekYear(now);
-
         const snapshotDbName = `${dbName}-week-${week}-${year}`;
 
         const srcClient = await ClientDB._connectExternal(sourceUri);
@@ -827,38 +825,111 @@ class ClientDB {
         const src = srcClient.db(dbName);
         const tgt = tgtClient.db(snapshotDbName);
 
-        // ⭐ Drop existing snapshot to prevent duplicate key errors
-        await tgt.dropDatabase();
-
         const collections = await src.listCollections().toArray();
+
         const report: any[] = [];
-        let totalDocs = 0;
+        let totalInserted = 0;
+        let totalUpdated = 0;
+        let totalDeleted = 0;
 
         for (const col of collections) {
             const name = col.name;
             const srcCol = src.collection(name);
             const tgtCol = tgt.collection(name);
 
-            const docs = await srcCol.find({}).toArray();
-            if (docs.length > 0) {
-                await tgtCol.insertMany(docs);
-                totalDocs += docs.length;
+            // --- Load all docs (lean, no heavy fields)
+            const srcDocs = await srcCol.find({}).toArray();
+            const tgtDocs = await tgtCol
+                .find({}, { projection: { _id: 1, updatedAt: 1 } })
+                .toArray();
+
+            const srcMap = new Map<string, any>();
+            const tgtMap = new Map<string, any>();
+
+            type MongoDoc = { _id: any; updatedAt?: any; [key: string]: any };
+
+            srcDocs.forEach((d: MongoDoc) => srcMap.set(String(d._id), d));
+            tgtDocs.forEach((d: MongoDoc) => tgtMap.set(String(d._id), d));
+
+            const inserts: any[] = [];
+            const updates: any[] = [];
+            const deletes: ObjectId[] = [];
+
+            // --- Compute inserts & updates
+            for (const [id, srcDoc] of srcMap.entries()) {
+                const tgtDoc = tgtMap.get(id);
+
+                if (!tgtDoc) {
+                    inserts.push(srcDoc);
+                } else {
+                    // If requires update
+                    const srcUpdatedAt =
+                        srcDoc.updatedAt instanceof Date
+                            ? srcDoc.updatedAt
+                            : new Date(srcDoc.updatedAt);
+                    const tgtUpdatedAt =
+                        tgtDoc.updatedAt instanceof Date
+                            ? tgtDoc.updatedAt
+                            : new Date(tgtDoc.updatedAt);
+
+                    if (srcUpdatedAt > tgtUpdatedAt) {
+                        updates.push(srcDoc);
+                    }
+                }
+            }
+
+            // --- Compute deletes
+            for (const [id] of tgtMap.entries()) {
+                if (!srcMap.has(id)) {
+                    deletes.push(new ObjectId(id));
+                }
+            }
+
+            // --- Apply inserts
+            if (inserts.length > 0) {
+                await tgtCol.insertMany(inserts);
+            }
+
+            // --- Apply updates (bulkWrite)
+            if (updates.length > 0) {
+                const bulkOps = updates.map((doc) => ({
+                    updateOne: {
+                        filter: { _id: doc._id },
+                        update: { $set: doc },
+                    },
+                }));
+                await tgtCol.bulkWrite(bulkOps, { ordered: false });
+            }
+
+            // --- Apply deletes
+            if (deletes.length > 0) {
+                await tgtCol.deleteMany({
+                    _id: { $in: deletes },
+                });
             }
 
             report.push({
                 collection: name,
-                inserted: docs.length,
+                inserted: inserts.length,
+                updated: updates.length,
+                deleted: deletes.length,
             });
+
+            totalInserted += inserts.length;
+            totalUpdated += updates.length;
+            totalDeleted += deletes.length;
         }
 
         await srcClient.close();
         await tgtClient.close();
 
         return {
-            mode: "full-sync",
+            mode: "full-sync-diff",
             sourceDb: dbName,
             snapshotDb: snapshotDbName,
-            totalDocs,
+            inserted: totalInserted,
+            updated: totalUpdated,
+            deleted: totalDeleted,
             report,
         };
     }
@@ -872,17 +943,19 @@ class ClientDB {
         const keepWeeks = params.keepWeeks ?? 26;
 
         const sourceUri = process.env.MONGODB_URI!;
-        const results: any[] = [];
 
-        for (const dbName of dbs) {
-            const r = await ClientDB.fullSyncOneDatabase({
+        const tasks = dbs.map((dbName) =>
+            ClientDB.fullSyncOneDatabase({
                 sourceUri,
                 targetUri: targetURI,
                 dbName,
-            });
-            results.push(r);
-        }
+            })
+        );
 
+        // ⭐ Parallel execution
+        const results = await Promise.allSettled(tasks);
+
+        // Run cleanup AFTER all DBs synced
         await ClientDB.cleanupSnapshots({
             targetURI,
             dbs,
@@ -890,7 +963,8 @@ class ClientDB {
         });
 
         return {
-            mode: "full-sync",
+            mode: "full-sync-diff",
+            syncedDatabases: dbs,
             results,
         };
     }
