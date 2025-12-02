@@ -6,6 +6,7 @@ import {
     ObjectId,
 } from "mongodb";
 import dotenv from "dotenv";
+import { getISOWeek, getISOWeekYear, subWeeks } from "date-fns";
 
 // Load environment variables
 dotenv.config();
@@ -805,6 +806,136 @@ class ClientDB {
             targetUri,
             results: allResults,
         };
+    }
+    static async fullSyncOneDatabase(params: {
+        sourceUri: string;
+        targetUri: string;
+        dbName: string;
+        keepWeeks?: number;
+    }) {
+        const { sourceUri, targetUri, dbName } = params;
+        const keepWeeks = params.keepWeeks ?? 26;
+
+        const now = new Date();
+        const week = getISOWeek(now);
+        const year = getISOWeekYear(now);
+
+        const snapshotDbName = `${dbName}-week-${week}-${year}`;
+
+        const srcClient = await ClientDB._connectExternal(sourceUri);
+        const tgtClient = await ClientDB._connectExternal(targetUri);
+
+        const src = srcClient.db(dbName);
+        const tgt = tgtClient.db(snapshotDbName);
+
+        const collections = await src.listCollections().toArray();
+        const report: any[] = [];
+        let totalDocs = 0;
+
+        for (const col of collections) {
+            const name = col.name;
+            const srcCol = src.collection(name);
+            const tgtCol = tgt.collection(name);
+
+            const docs = await srcCol.find({}).toArray();
+            if (docs.length) {
+                await tgtCol.insertMany(docs);
+                totalDocs += docs.length;
+            }
+
+            report.push({
+                collection: name,
+                inserted: docs.length,
+            });
+        }
+
+        await srcClient.close();
+        await tgtClient.close();
+
+        return {
+            mode: "full-sync",
+            sourceDb: dbName,
+            snapshotDb: snapshotDbName,
+            totalDocs,
+            report,
+        };
+    }
+
+    static async fullSyncManyDatabases(params: {
+        targetURI: string;
+        dbs: string[];
+        keepWeeks?: number;
+    }) {
+        const { targetURI, dbs } = params;
+        const keepWeeks = params.keepWeeks ?? 26;
+
+        const sourceUri = process.env.MONGODB_URI!;
+        const results: any[] = [];
+
+        for (const dbName of dbs) {
+            const r = await ClientDB.fullSyncOneDatabase({
+                sourceUri,
+                targetUri: targetURI,
+                dbName,
+                keepWeeks,
+            });
+            results.push(r);
+        }
+
+        await ClientDB.cleanupSnapshots({
+            targetURI,
+            dbs,
+            keepWeeks,
+        });
+
+        return {
+            mode: "full-sync",
+            results,
+        };
+    }
+
+    static async cleanupSnapshots(params: {
+        targetURI: string;
+        dbs: string[];
+        keepWeeks?: number;
+    }) {
+        const { targetURI, dbs } = params;
+        const keepWeeks = params.keepWeeks ?? 26;
+
+        const client = await ClientDB._connectExternal(targetURI);
+        const admin = client.db().admin();
+
+        const all = await admin.listDatabases();
+        const names: string[] = all.databases.map(
+            (d: { name: string }) => d.name
+        );
+
+        const cutoff = subWeeks(new Date(), keepWeeks);
+        const cutoffWeek = getISOWeek(cutoff);
+        const cutoffYear = getISOWeekYear(cutoff);
+
+        for (const base of dbs) {
+            const prefix = `${base}-week-`;
+
+            const matches = names.filter((name) => name.startsWith(prefix));
+
+            for (const dbName of matches) {
+                const parts = dbName.replace(prefix, "").split("-");
+                const week = Number(parts[0]);
+                const year = Number(parts[1]);
+
+                const isOld =
+                    year < cutoffYear ||
+                    (year === cutoffYear && week < cutoffWeek);
+
+                if (isOld) {
+                    console.log(`🗑 Removing old snapshot: ${dbName}`);
+                    await client.db(dbName).dropDatabase();
+                }
+            }
+        }
+
+        await client.close();
     }
 }
 
