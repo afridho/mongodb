@@ -340,6 +340,11 @@ class ClientDB {
         const databases = [];
 
         for (const dbInfo of dbList.databases) {
+            // Skip system databases that often have restricted access
+            if (["admin", "local", "config"].includes(dbInfo.name)) {
+                continue;
+            }
+
             const db = client.db(dbInfo.name);
             try {
                 const stats = await db.command({ dbStats: 1 });
@@ -357,10 +362,13 @@ class ClientDB {
                     objects: stats.objects,
                 });
             } catch (err) {
-                console.error(
-                    `Error getting stats for db ${dbInfo.name}:`,
-                    err,
-                );
+                // Only log if it's not an authorization error to keep logs clean
+                if (!(err as any).message?.includes("Unauthorized")) {
+                    console.error(
+                        `Error getting stats for db ${dbInfo.name}:`,
+                        err,
+                    );
+                }
                 databases.push({
                     name: dbInfo.name,
                     error: (err as Error).message,
