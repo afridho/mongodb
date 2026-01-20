@@ -1,6 +1,6 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.7.39",
+    "version": "1.7.40",
     "description": "A simple MongoDB client wrapper for easy database operations",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -28,7 +28,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/afridho/mongodb.git"
+        "url": "git+https://github.com/afridho/mongodb.git"
     },
     "homepage": "https://github.com/afridho/mongodb#readme",
     "author": "afridho",
