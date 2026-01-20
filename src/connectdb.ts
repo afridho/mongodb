@@ -181,7 +181,7 @@ class ClientDB {
     async updateMany(
         query: Document,
         data: Document | Document[],
-        options: { upsert?: boolean } = {}
+        options: { upsert?: boolean } = {},
     ): Promise<Document> {
         await this.connect();
         const processedQuery = this.preprocessQuery(query);
@@ -192,8 +192,8 @@ class ClientDB {
         const updateDoc = Array.isArray(data)
             ? data
             : hasOperator
-            ? data
-            : { $set: data };
+              ? data
+              : { $set: data };
 
         return await this.collection!.updateMany(processedQuery, updateDoc, {
             upsert: options.upsert ?? false,
@@ -230,14 +230,14 @@ class ClientDB {
     async find(
         query: Document,
         options?: ReadAllOptions,
-        project?: Document
+        project?: Document,
     ): Promise<Document[]> {
         await this.connect();
         const processedQuery = this.preprocessQuery(query);
 
         let cursor = this.collection!.find(
             processedQuery,
-            project ? { projection: project } : undefined
+            project ? { projection: project } : undefined,
         );
 
         if (options?.sort) {
@@ -322,6 +322,61 @@ class ClientDB {
     }
 
     /**
+     * Gets cluster-wide storage statistics.
+     */
+    static async getClusterStats(): Promise<{
+        totalDataSize: number;
+        totalStorageSize: number;
+        totalIndexSize: number;
+        databases: any[];
+    }> {
+        const client = await getMongoClient();
+        const admin = client.db().admin();
+        const dbList = await admin.listDatabases();
+
+        let totalDataSize = 0;
+        let totalStorageSize = 0;
+        let totalIndexSize = 0;
+        const databases = [];
+
+        for (const dbInfo of dbList.databases) {
+            const db = client.db(dbInfo.name);
+            try {
+                const stats = await db.command({ dbStats: 1 });
+
+                totalDataSize += stats.dataSize || 0;
+                totalStorageSize += stats.storageSize || 0;
+                totalIndexSize += stats.indexSize || 0;
+
+                databases.push({
+                    name: dbInfo.name,
+                    dataSize: stats.dataSize,
+                    storageSize: stats.storageSize,
+                    indexSize: stats.indexSize,
+                    collections: stats.collections,
+                    objects: stats.objects,
+                });
+            } catch (err) {
+                console.error(
+                    `Error getting stats for db ${dbInfo.name}:`,
+                    err,
+                );
+                databases.push({
+                    name: dbInfo.name,
+                    error: (err as Error).message,
+                });
+            }
+        }
+
+        return {
+            totalDataSize,
+            totalStorageSize,
+            totalIndexSize,
+            databases,
+        };
+    }
+
+    /**
      * Closes the MongoDB connection.
      * @returns {Promise<void>}
      */
@@ -392,7 +447,7 @@ class ClientDB {
             isSingle?: boolean; // 👈 NEW
         }[] = [],
         project: Document = {},
-        options?: ReadAllOptions
+        options?: ReadAllOptions,
     ): Promise<Document[]> {
         await this.connect();
         const processedQuery = this.preprocessQuery(filter);
@@ -495,7 +550,7 @@ class ClientDB {
             isObjectId?: boolean;
             isSingle?: boolean;
         }[] = [],
-        project: Document = {}
+        project: Document = {},
     ): Promise<Document | null> {
         await this.connect();
         const processedQuery = this.preprocessQuery(filter);
@@ -574,7 +629,7 @@ class ClientDB {
      * @returns number of documents updated
      */
     async migrateDateFields(
-        fields: string[] = ["createdAt", "updatedAt", "startAt", "endAt"]
+        fields: string[] = ["createdAt", "updatedAt", "startAt", "endAt"],
     ): Promise<number> {
         await this.connect();
 
@@ -597,7 +652,7 @@ class ClientDB {
             if (Object.keys(updates).length > 0) {
                 await this.collection!.updateOne(
                     { _id: doc._id },
-                    { $set: updates }
+                    { $set: updates },
                 );
                 count++;
             }
@@ -632,7 +687,7 @@ class ClientDB {
         const { targetUri, sourceDb, targetDb } = params;
 
         const sourceClient = await ClientDB._connectExternal(
-            process.env.MONGODB_URI!
+            process.env.MONGODB_URI!,
         );
         const targetClient = await ClientDB._connectExternal(targetUri);
 
@@ -666,7 +721,7 @@ class ClientDB {
                 await tgtCol.updateOne(
                     { _id: doc._id },
                     { $set: doc },
-                    { upsert: true }
+                    { upsert: true },
                 );
             }
 
@@ -680,7 +735,7 @@ class ClientDB {
         await metaCol.updateOne(
             { _id: "incremental" },
             { $set: { lastBackupAt: now } },
-            { upsert: true }
+            { upsert: true },
         );
 
         await sourceClient.close();
@@ -701,7 +756,7 @@ class ClientDB {
      */
     static async incrementalBackupManyDatabases(
         targetUri: string,
-        dbList: string[]
+        dbList: string[],
     ) {
         const allResults: any[] = [];
 
@@ -734,7 +789,7 @@ class ClientDB {
         const { targetUri, sourceDb, targetDb } = params;
 
         const sourceClient = await ClientDB._connectExternal(
-            process.env.MONGODB_URI!
+            process.env.MONGODB_URI!,
         );
         const targetClient = await ClientDB._connectExternal(targetUri);
 
@@ -753,7 +808,7 @@ class ClientDB {
             const tgtIds: Set<string> = new Set(
                 (
                     await tgtCol.find({}, { projection: { _id: 1 } }).toArray()
-                ).map((d: Document) => String(d._id))
+                ).map((d: Document) => String(d._id)),
             );
 
             // dokumen yang belum ada
@@ -949,7 +1004,7 @@ class ClientDB {
                 sourceUri,
                 targetUri: targetURI,
                 dbName,
-            })
+            }),
         );
 
         // ⭐ Parallel execution
@@ -982,7 +1037,7 @@ class ClientDB {
 
         const all = await admin.listDatabases();
         const names: string[] = all.databases.map(
-            (d: { name: string }) => d.name
+            (d: { name: string }) => d.name,
         );
 
         const cutoff = subWeeks(new Date(), keepWeeks);
