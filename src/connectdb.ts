@@ -726,9 +726,10 @@ class ClientDB {
                 .toArray();
 
             for (const doc of changedDocs) {
+                const { _id, ...data } = doc;
                 await tgtCol.updateOne(
-                    { _id: doc._id },
-                    { $set: doc },
+                    { _id: _id },
+                    { $set: data },
                     { upsert: true },
                 );
             }
@@ -813,18 +814,15 @@ class ClientDB {
             const tgtCol = tgt.collection(name);
 
             // semua _id di backup
-            const tgtIds: Set<string> = new Set(
-                (
-                    await tgtCol.find({}, { projection: { _id: 1 } }).toArray()
-                ).map((d: Document) => String(d._id)),
-            );
+            const tgtDocs = await tgtCol
+                .find({}, { projection: { _id: 1 } })
+                .toArray();
+            const tgtIds = tgtDocs.map((d: Document) => d._id);
 
             // dokumen yang belum ada
             const newDocs = await srcCol
                 .find({
-                    _id: {
-                        $nin: Array.from(tgtIds).map((id) => new ObjectId(id)),
-                    },
+                    _id: { $nin: tgtIds },
                 })
                 .toArray();
 
@@ -942,9 +940,9 @@ class ClientDB {
             }
 
             // --- Compute deletes
-            for (const [id] of tgtMap.entries()) {
+            for (const [id, tgtDoc] of tgtMap.entries()) {
                 if (!srcMap.has(id)) {
-                    deletes.push(new ObjectId(id));
+                    deletes.push(tgtDoc._id);
                 }
             }
 
@@ -955,12 +953,15 @@ class ClientDB {
 
             // --- Apply updates (bulkWrite)
             if (updates.length > 0) {
-                const bulkOps = updates.map((doc) => ({
-                    updateOne: {
-                        filter: { _id: doc._id },
-                        update: { $set: doc },
-                    },
-                }));
+                const bulkOps = updates.map((doc) => {
+                    const { _id, ...data } = doc;
+                    return {
+                        updateOne: {
+                            filter: { _id },
+                            update: { $set: data },
+                        },
+                    };
+                });
                 await tgtCol.bulkWrite(bulkOps, { ordered: false });
             }
 
