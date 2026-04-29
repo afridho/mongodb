@@ -1,6 +1,6 @@
 {
     "name": "afridho-mongodb",
-    "version": "1.7.48",
+    "version": "1.7.49",
     "description": "A simple MongoDB client wrapper for easy database operations",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -18,8 +18,10 @@
     },
     "dependencies": {
         "date-fns": "^4.1.0",
-        "dotenv": "^16.0.3",
-        "mongodb": "^6.20.0"
+        "dotenv": "^16.0.3"
+    },
+    "peerDependencies": {
+        "mongodb": "^6.0.0 || ^7.0.0"
     },
     "devDependencies": {
         "@types/mongodb": "^4.0.7",
