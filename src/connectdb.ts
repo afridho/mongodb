@@ -78,6 +78,18 @@ class ClientDB {
         return this.client.db(DB_NAME);
     }
 
+    /**
+     * Returns the native MongoDB Db instance synchronously.
+     * The driver will handle connection queuing in the background.
+     */
+    static getNativeDbSync() {
+        if (!global._mongoClient) {
+            console.log("🌱 Initializing synchronous MongoDB connection...");
+            global._mongoClient = new MongoClient(DB_URI, mongoOptions);
+        }
+        return global._mongoClient.db(DB_NAME);
+    }
+
     private client!: MongoClient;
     private collectionName: string;
     private collection: Collection | null;
