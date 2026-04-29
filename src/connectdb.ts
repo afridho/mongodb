@@ -61,6 +61,23 @@ interface ReadAllOptions {
  * Class representing a MongoDB client for a specific collection.
  */
 class ClientDB {
+    /**
+     * Returns the native MongoDB Db instance from the global connection.
+     * Useful for libraries that require a direct Db object (e.g. Better-Auth).
+     */
+    static async getNativeDb() {
+        const client = await getMongoClient();
+        return client.db(DB_NAME);
+    }
+
+    /**
+     * Returns the native MongoDB Db instance for this instance's connection.
+     */
+    async getNativeDb() {
+        await this.connect();
+        return this.client.db(DB_NAME);
+    }
+
     private client!: MongoClient;
     private collectionName: string;
     private collection: Collection | null;
