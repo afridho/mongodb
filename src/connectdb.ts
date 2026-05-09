@@ -11,25 +11,30 @@ import { getISOWeek, getISOWeekYear, subWeeks } from "date-fns";
 // Load environment variables
 dotenv.config();
 
-// Explicitly define the type and provide a default empty string to satisfy TypeScript
-const DB_URI: string = process.env.MONGODB_URI || "";
-const DB_NAME: string = process.env.DB_NAME || "";
-
-// Validate environment variables before proceeding
-if (!DB_URI) {
-    throw new Error("MONGODB_URI must be set in the environment");
-}
-
-if (!DB_NAME) {
-    throw new Error("DB_NAME must be set in the environment");
-}
-
 // Define MongoDB client options
 const mongoOptions: MongoClientOptions = {
     connectTimeoutMS: 30000,
     maxPoolSize: 20, // prevent excessive parallel connections
     maxIdleTimeMS: 60000,
 };
+
+// Lazy getters for env vars — only validated when actually needed (not at import time).
+// This allows the module to be imported during build without throwing.
+function getDbUri(): string {
+    const uri = process.env.MONGODB_URI || "";
+    if (!uri) {
+        throw new Error("MONGODB_URI must be set in the environment");
+    }
+    return uri;
+}
+
+function getDbName(): string {
+    const name = process.env.DB_NAME || "";
+    if (!name) {
+        throw new Error("DB_NAME must be set in the environment");
+    }
+    return name;
+}
 
 // --- Global connection cache (important for serverless) ---
 declare global {
@@ -41,7 +46,7 @@ async function getMongoClient(): Promise<MongoClient> {
     if (global._mongoClient) return global._mongoClient;
 
     console.log("🌱 Connecting to MongoDB...");
-    const client = new MongoClient(DB_URI, mongoOptions);
+    const client = new MongoClient(getDbUri(), mongoOptions);
     await client.connect();
     global._mongoClient = client;
     return client;
@@ -67,7 +72,7 @@ class ClientDB {
      */
     static async getNativeDb() {
         const client = await getMongoClient();
-        return client.db(DB_NAME);
+        return client.db(getDbName());
     }
 
     /**
@@ -75,7 +80,7 @@ class ClientDB {
      */
     async getNativeDb() {
         await this.connect();
-        return this.client.db(DB_NAME);
+        return this.client.db(getDbName());
     }
 
     /**
@@ -85,9 +90,9 @@ class ClientDB {
     static getNativeDbSync() {
         if (!global._mongoClient) {
             console.log("🌱 Initializing synchronous MongoDB connection...");
-            global._mongoClient = new MongoClient(DB_URI, mongoOptions);
+            global._mongoClient = new MongoClient(getDbUri(), mongoOptions);
         }
-        return global._mongoClient.db(DB_NAME);
+        return global._mongoClient.db(getDbName());
     }
 
     private client!: MongoClient;
@@ -110,7 +115,7 @@ class ClientDB {
     async connect(): Promise<void> {
         if (!this.collection) {
             this.client = await getMongoClient();
-            const db = this.client.db(DB_NAME);
+            const db = this.client.db(getDbName());
             this.collection = db.collection(this.collectionName);
         }
     }
@@ -341,7 +346,7 @@ class ClientDB {
     }> {
         await this.connect();
         const stats = await this.client
-            .db(DB_NAME)
+            .db(getDbName())
             .command({ collStats: this.collectionName });
         return {
             storageSize: stats.storageSize,
